@@ -1,17 +1,20 @@
+use crate::simulator::Simulator;
 use bevy::input::mouse::MouseWheel;
 use bevy::{prelude::*, render::render_asset::RenderAssetUsages};
 use rand::Rng;
 
+// Add this for Particle
 #[derive(Component)]
-struct FluidParticle;
+pub struct Particle(pub usize);
 
 pub fn setup(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    mut simulator: ResMut<Simulator>, // 注意：需要把Simulator作为资源传入
 ) {
     // 盒子尺寸
-    let box_size = 5.0;
+    let box_size = 10.0;
     let half_size = box_size / 2.0;
 
     // 创建盒子边框（使用线段）
@@ -79,20 +82,24 @@ pub fn setup(
         MeshMaterial3d(border_material),
     ));
 
-    // 创建流体粒子（球体）
-    let particle_count = 100;
-    let particle_radius = 0.1;
+    // simulator.reset_system();
 
     let mut rng = rand::rng();
 
-    for _ in 0..particle_count {
+    for i in 0..600 {
         // 在盒子内部随机位置生成粒子
         let x = rng.random_range(-box_size / 2.0..box_size / 2.0);
         let y = rng.random_range(-box_size / 2.0..box_size / 2.0);
         let z = rng.random_range(-box_size / 2.0..box_size / 2.0);
+        // let x = 1.0;
+        // let y = 1.0;
+        // let z = 1.0;
 
+        // 用Simulator中的粒子数据生成实体
+        // for (i, pos) in simulator.position.iter().enumerate() {
+        // println!("Spawn particle {} at {:?}", i, pos);
         commands.spawn((
-            Mesh3d(meshes.add(Sphere::new(particle_radius).mesh().ico(4).unwrap())),
+            Mesh3d(meshes.add(Sphere::new(0.1).mesh().ico(6).unwrap())),
             MeshMaterial3d(materials.add(StandardMaterial {
                 base_color: Color::srgb(0.0, 30.0 / 255.0, 1.0),
                 metallic: 0.2,
@@ -100,9 +107,10 @@ pub fn setup(
                 ..default()
             })),
             Transform::from_xyz(x, y, z),
-            FluidParticle,
+            Particle(i),
         ));
     }
+    // println!("Spawned {} particles", simulator.num_sphere);
 
     // 添加灯光
     commands.spawn((
@@ -175,11 +183,19 @@ pub fn camera_control_system(
     let offset = rotation * Vec3::new(0.0, 0.0, *distance);
     transform.translation = target + offset;
     transform.look_at(target, Vec3::Y);
+}
 
-    // // 计算新的旋转
-    // let rotation = Quat::from_rotation_y(*yaw) * Quat::from_rotation_x(*pitch);
-    // // 让摄像头围绕原点旋转
-    // transform.translation = Vec3::new(0.0, 7.0, 14.0); // 固定距离
-    // transform.look_at(Vec3::new(0.0, 1.0, 0.0), Vec3::Y);
-    // transform.rotate_around(Vec3::ZERO, rotation);
+pub fn sync_particles_system(
+    simulator: Res<Simulator>,
+    mut query: Query<(&Particle, &mut Transform)>,
+) {
+    for (particle, mut transform) in query.iter_mut() {
+        let idx = particle.0;
+        if idx < simulator.position.len() {
+            transform.translation = simulator.position[idx];
+        }
+    }
+}
+pub fn simulation_step(mut simulator: ResMut<Simulator>, time: Res<Time>) {
+    simulator.simulate_timestep(1.0 / 500.0);
 }
