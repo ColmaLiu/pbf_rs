@@ -3,6 +3,7 @@ use bevy::prelude::*;
 use crate::set_scene::{camera_control_system, setup};
 
 mod set_scene;
+mod simulator;
 
 fn main() {
     App::new()
