@@ -1,8 +1,8 @@
 use bevy::prelude::*;
-
+#[derive(Resource)]
 pub struct Simulator {
     pub position: Vec<Vec3>, // Particle Position
-    velocity: Vec<Vec3>, // Particle Velocity
+    velocity: Vec<Vec3>,     // Particle Velocity
     color: Vec<Vec3>,
 
     position_: Vec<Vec3>,
@@ -24,13 +24,13 @@ pub struct Simulator {
     slide_vel: f32,
     slide_dir: i32,
 
-    num_sphere: usize,
+    pub num_sphere: usize,
     pub radius: f32, // radius of particles
 
     rest_density: f32,
     num: usize,
     ratio: f32, // ratio between max neighbor distance and particle radius
-    h: f32, // max neighbor distance
+    h: f32,     // max neighbor distance
 
     solver_iteration: usize,
     relaxation: f32,
@@ -314,7 +314,8 @@ impl Simulator {
     }
 
     fn setup_scene(&mut self) {
-        let base = -self.tank * 0.5 + self.offset * (vec3(1.0, 1.0, 1.0) - self.rel_water) * self.tank;
+        let base =
+            -self.tank * 0.5 + self.offset * (vec3(1.0, 1.0, 1.0) - self.rel_water) * self.tank;
 
         let dx = 2.0 * self.radius;
         let dy = 3.0_f32.sqrt() / 2.0 * dx;
@@ -361,17 +362,9 @@ impl Simulator {
             for j in 0..num_y {
                 for k in 0..num_z {
                     self.position[p] = vec3(
-                        self.radius + dx * i as f32 + (if j % 2 == 0 {
-                            0.0
-                        } else {
-                            self.radius
-                        }),
+                        self.radius + dx * i as f32 + (if j % 2 == 0 { 0.0 } else { self.radius }),
                         self.radius + dy * j as f32,
-                        self.radius + dz * k as f32 + (if j % 2 == 0 {
-                            0.0
-                        } else {
-                            self.radius
-                        })
+                        self.radius + dz * k as f32 + (if j % 2 == 0 { 0.0 } else { self.radius }),
                     ) + base;
                     p += 1;
                 }
