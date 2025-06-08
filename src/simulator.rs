@@ -12,8 +12,8 @@ pub struct Simulator {
     cell_y: usize,
     cell_z: usize,
     num_cell: usize,
-    hashtable: Vec<i32>,
-    hashtableindex: Vec<i32>,
+    hashtable: Vec<usize>,
+    hashtableindex: Vec<usize>,
 
     pub scene_id: i32,
     pub scene_changed: bool,
@@ -35,7 +35,6 @@ pub struct Simulator {
     solver_iteration: usize,
     relaxation: f32,
     damping: f32,
-    viscosity_coeff: f32,
     gravity: Vec3,
 }
 
@@ -106,34 +105,98 @@ impl Simulator {
             h: 0.0,
 
             solver_iteration: 5,
-            relaxation: 2e5,
+            relaxation: 1e3,
             damping: 0.999,
-            viscosity_coeff: 1e-8,
             gravity: Vec3::new(0.0, -9.81, 0.0), // 默认重力加速度
         }
     }
 
     fn calc_density(&self, index: usize) -> f32 {
-        todo!()
+        let mut density = 0.0;
+        let pos = self.position_[index];
+        for &neighbor_index in &self.neighbor[index] {
+            let r = pos - self.position_[neighbor_index];
+            let d = poly6(&r, self.h);
+            density += d;
+        }
+        density
     }
 
     fn calc_constraint(&self, index: usize) -> f32 {
-        todo!()
+        self.calc_density(index) / self.rest_density - 1.0
     }
 
     fn calc_grad_constraint(&self, index: usize, neighbor_index: usize) -> Vec3 {
-        todo!()
+        let grad_c = if neighbor_index == index {
+            let mut grad_c = Vec3::ZERO;
+            for &neighbor in &self.neighbor[index] {
+                let r = self.position_[index] - self.position_[neighbor];
+                grad_c += grad_spiky(&r, self.h);
+            }
+            grad_c
+        } else {
+            let r = self.position_[index] - self.position_[neighbor_index];
+            -grad_spiky(&r, self.h)
+        };
+        grad_c / self.rest_density
     }
 
-    fn handle_collisions(&self) {
-        todo!()
+    fn handle_collisions(&mut self) {
+        for i in 0..self.num_sphere {
+            if self.position_[i].x < 0.5 * self.tank.x + self.radius {
+                self.position_[i].x = 0.5 * self.tank.x + self.radius;
+            }
+            if self.position_[i].x > 0.5 * self.tank.x * self.slide_pos - self.radius {
+                self.position_[i].x = 0.5 * self.tank.x * self.slide_pos - self.radius;
+            }
+
+            if self.position_[i].y < 0.5 * self.tank.y + self.radius {
+                self.position_[i].y = 0.5 * self.tank.y + self.radius;
+            }
+            if self.position_[i].y > 0.5 * self.tank.y - self.radius {
+                self.position_[i].y = 0.5 * self.tank.y - self.radius;
+            }
+
+            if self.position_[i].z < 0.5 * self.tank.z + self.radius {
+                self.position_[i].z = 0.5 * self.tank.z + self.radius;
+            }
+            if self.position_[i].z > 0.5 * self.tank.z - self.radius {
+                self.position_[i].z = 0.5 * self.tank.z - self.radius;
+            }
+        }
     }
 
     fn index2grid_offset(&self, index: UVec3) -> usize {
-        todo!()
+        index.x as usize * self.cell_y * self.cell_z
+            + index.y as usize * self.cell_z
+            + index.z as usize
     }
-    fn build_hashtable(&self) {
-        todo!()
+
+    fn build_hashtable(&mut self) {
+        self.hashtable.fill(0);
+        self.hashtableindex.fill(0);
+
+        for i in 0..self.num_sphere {
+            let pos = self.position_[i];
+            let index = ((pos + 0.5 * self.tank) / self.h).as_uvec3() + 1;
+            let offset = self.index2grid_offset(index);
+            self.hashtableindex[offset] += 1;
+        }
+
+        let mut prefix_sum = 0;
+        for i in 0..self.num_cell {
+            prefix_sum += self.hashtableindex[i];
+            self.hashtableindex[i] = prefix_sum;
+        }
+        self.hashtableindex[self.num_cell] = prefix_sum;
+
+        for i in 0..self.num_sphere {
+            let pos = self.position_[i];
+            let index = ((pos + 0.5 * self.tank) / self.h).as_uvec3() + 1;
+            let offset = self.index2grid_offset(index);
+            self.hashtableindex[offset] -= 1;
+            self.hashtable[self.hashtableindex[offset]] = i;
+        }
     }
 
     fn intergrate_particles(&mut self, dt: f32) {
@@ -143,12 +206,76 @@ impl Simulator {
         }
     }
 
-    fn detect_neighbor(&self) {
-        todo!()
+    fn detect_neighbor(&mut self) {
+        self.handle_collisions();
+        self.build_hashtable();
+        self.neighbor.clear();
+        self.neighbor.resize(self.num_sphere, Vec::new());
+        for p in 0..self.num_sphere {
+            let pos = self.position_[p];
+            let grid_index = ((pos + 0.5 * self.tank) / self.h).as_uvec3() + 1;
+            for i in -1..=1 {
+                for j in -1..=1 {
+                    for k in -1..=1 {
+                        let offset = self.index2grid_offset(UVec3::new(
+                            (grid_index.x as i32 + i) as u32,
+                            (grid_index.y as i32 + j) as u32,
+                            (grid_index.z as i32 + k) as u32,
+                        ));
+                        let start = self.hashtableindex[offset];
+                        let end = self.hashtableindex[offset + 1];
+
+                        for idx in start..end {
+                            let neighbor_index = self.hashtable[idx];
+                            if neighbor_index != p {
+                                let d = self.position_[neighbor_index] - pos;
+                                if d.length_squared() < self.h * self.h {
+                                    self.neighbor[p].push(neighbor_index);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
-    fn constraint_solve(&self) {
-        todo!()
+    fn constraint_solve(&mut self) {
+        let mut lambda = vec![0.0; self.num_sphere];
+        let mut delta_pos = vec![Vec3::ZERO; self.num_sphere];
+        for i in 0..self.num_sphere {
+            let numerator = self.calc_constraint(i);
+            let mut denominator = 0.0;
+            for &j in &self.neighbor[i] {
+                let grad_c = self.calc_grad_constraint(i, j);
+                denominator += grad_c.length_squared();
+            }
+            denominator += self.calc_grad_constraint(i, i).length_squared();
+            denominator += self.relaxation;
+            lambda[i] = -numerator / denominator;
+        }
+
+        const K: f32 = 1e-5;
+        const N: i32 = 4;
+        let w = poly6(&vec3(0.3 * self.h, 0.0, 0.0), self.h);
+        for i in 0..self.num_sphere {
+            let pos = self.position_[i];
+            for &j in &self.neighbor[i] {
+                if j == i {
+                    continue;
+                }
+                let r = pos - self.position_[j];
+                let ratio = poly6(&r, self.h) / w;
+                let s_corr = -K * f32::powi(ratio, N);
+                delta_pos[i] += (lambda[i] + lambda[j] + s_corr) * grad_spiky(&r, self.h);
+            }
+            delta_pos[i] /= self.rest_density;
+        }
+
+        for i in 0..self.num_sphere {
+            self.position_[i] += delta_pos[i];
+        }
+        self.handle_collisions();
     }
 
     fn velocity_update(&mut self, dt: f32) {
@@ -158,8 +285,12 @@ impl Simulator {
         }
     }
 
-    fn update_particle_colors(&self) {
-        todo!()
+    fn update_particle_colors(&mut self) {
+        for i in 0..self.num_sphere {
+            let rel_density = f32::clamp(f32::sqrt(self.neighbor[i].len() as f32 / 13.0), 0.7, 1.0);
+            self.color[i].x = 1.0 - rel_density;
+            self.color[i].y = 1.0 - (1.0 - 30.0 / 255.0) * rel_density;
+        }
     }
 
     pub fn simulate_timestep(&mut self, dt: f32) {
@@ -174,12 +305,12 @@ impl Simulator {
             }
         }
         self.intergrate_particles(dt);
-        // self.detect_neighbor();
-        // for iter in 0..self.solver_iteration {
-        //     self.constraint_solve();
-        // }
+        self.detect_neighbor();
+        for _ in 0..self.solver_iteration {
+            self.constraint_solve();
+        }
         self.velocity_update(dt);
-        // self.update_particle_colors();
+        self.update_particle_colors();
     }
 
     fn setup_scene(&mut self) {
@@ -220,9 +351,9 @@ impl Simulator {
         self.hashtableindex.resize(self.num_cell + 1, 0);
 
         // the rest density can be assigned after scene initialization
-        let factor = INV_PI * 315.0 * 5.0 * 5.0 * 5.0 / (64.0 * 9.0 * 9.0 * 9.0);
+        const FACTOR: f32 = INV_PI * 315.0 * 5.0 * 5.0 * 5.0 / (64.0 * 9.0 * 9.0 * 9.0);
         let h = self.h;
-        self.rest_density = factor * (self.num as f32) / (h * h * h);
+        self.rest_density = FACTOR * (self.num as f32) / (h * h * h);
 
         // create particles
         let mut p = 0;
