@@ -1,11 +1,12 @@
+use std::iter::zip;
+
 use crate::simulator::Simulator;
 use bevy::input::mouse::MouseWheel;
 use bevy::{prelude::*, render::render_asset::RenderAssetUsages};
-use rand::Rng;
 
 // Add this for Particle
 #[derive(Component)]
-pub struct Particle(pub usize);
+pub struct Particle;
 
 pub fn setup(
     mut commands: Commands,
@@ -14,7 +15,7 @@ pub fn setup(
     mut simulator: ResMut<Simulator>, // 注意：需要把Simulator作为资源传入
 ) {
     // 盒子尺寸
-    let box_size = 10.0;
+    let box_size = 1.0;
     let half_size = box_size / 2.0;
 
     // 创建盒子边框（使用线段）
@@ -82,52 +83,37 @@ pub fn setup(
         MeshMaterial3d(border_material),
     ));
 
-    // simulator.reset_system();
+    simulator.reset_system();
 
-    let mut rng = rand::rng();
-
-    for i in 0..600 {
-        // 在盒子内部随机位置生成粒子
-        let x = rng.random_range(-box_size / 2.0..box_size / 2.0);
-        let y = rng.random_range(-box_size / 2.0..box_size / 2.0);
-        let z = rng.random_range(-box_size / 2.0..box_size / 2.0);
-        // let x = 1.0;
-        // let y = 1.0;
-        // let z = 1.0;
-
-        // 用Simulator中的粒子数据生成实体
-        // for (i, pos) in simulator.position.iter().enumerate() {
-        // println!("Spawn particle {} at {:?}", i, pos);
+    for pos in simulator.position.iter() {
         commands.spawn((
-            Mesh3d(meshes.add(Sphere::new(0.1).mesh().ico(6).unwrap())),
+            Mesh3d(meshes.add(Sphere::new(simulator.radius).mesh().ico(4).unwrap())),
             MeshMaterial3d(materials.add(StandardMaterial {
                 base_color: Color::srgb(0.0, 30.0 / 255.0, 1.0),
                 metallic: 0.2,
                 perceptual_roughness: 0.7,
                 ..default()
             })),
-            Transform::from_xyz(x, y, z),
-            Particle(i),
+            Transform::from_xyz(pos.x, pos.y, pos.z),
+            Particle,
         ));
     }
-    // println!("Spawned {} particles", simulator.num_sphere);
+    println!("Spawned {} particles", simulator.num_sphere);
 
     // 添加灯光
     commands.spawn((
         PointLight {
-            shadows_enabled: true,
-            intensity: 10_000_000.,
-            range: 100.0,
-            shadow_depth_bias: 0.2,
+            intensity: 1_000_000.0,
+            range: 20.0,
             ..default()
         },
-        Transform::from_xyz(8.0, 16.0, 8.0),
+        Transform::from_xyz(4.0, 8.0, 4.0),
     ));
 
     // 添加相机
     commands.spawn((
         Camera3d::default(),
-        Transform::from_xyz(0.0, 7., 14.0).looking_at(Vec3::new(0., 1., 0.), Vec3::Y),
+        Transform::from_xyz(0.0, 0., 3.0).looking_at(Vec3::new(0., 0., 0.), Vec3::Y),
     ));
 }
 
@@ -142,7 +128,7 @@ pub fn camera_control_system(
 ) {
     // 如果 distance 还没初始化，赋初值
     if *distance == 0.0 {
-        *distance = 14.0;
+        *distance = 3.0;
     }
     let mut transform = query.single_mut().unwrap(); // 解包Result
     let rotation_speed = 1.0;
@@ -179,23 +165,18 @@ pub fn camera_control_system(
 
     // 计算旋转和位置
     let rotation = Quat::from_rotation_y(*yaw) * Quat::from_rotation_x(*pitch);
-    let target = Vec3::new(0.0, 1.0, 0.0);
+    let target = Vec3::new(0.0, 0.0, 0.0);
     let offset = rotation * Vec3::new(0.0, 0.0, *distance);
     transform.translation = target + offset;
     transform.look_at(target, Vec3::Y);
 }
 
-pub fn sync_particles_system(
-    simulator: Res<Simulator>,
-    mut query: Query<(&Particle, &mut Transform)>,
+pub fn simulation_step(
+    mut simulator: ResMut<Simulator>,
+    mut query: Query<(&Particle, &mut Transform)>
 ) {
-    for (particle, mut transform) in query.iter_mut() {
-        let idx = particle.0;
-        if idx < simulator.position.len() {
-            transform.translation = simulator.position[idx];
-        }
+    simulator.simulate_timestep(1.0 / 200.0);
+    for (position, (_, mut transform)) in zip(simulator.position.iter(), query.iter_mut()) {
+        transform.translation = *position;
     }
-}
-pub fn simulation_step(mut simulator: ResMut<Simulator>, time: Res<Time>) {
-    simulator.simulate_timestep(1.0 / 500.0);
 }

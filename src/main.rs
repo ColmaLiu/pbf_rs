@@ -1,7 +1,8 @@
 use bevy::prelude::*;
 
-use crate::set_scene::{camera_control_system, setup, simulation_step, sync_particles_system};
+use crate::set_scene::{camera_control_system, setup, simulation_step};
 use crate::simulator::Simulator;
+mod parallel;
 mod set_scene;
 mod simulator;
 
@@ -10,14 +11,7 @@ fn main() {
         .add_plugins(DefaultPlugins)
         .insert_resource(Simulator::new())
         .add_systems(Startup, setup)
-        // 在每一帧更新时都运行我们的摄像头控制系统
-        .add_systems(
-            Update,
-            (
-                camera_control_system,
-                // sync_particles_system,
-                // simulation_step,
-            ),
-        )
+        .add_systems(Update, camera_control_system)
+        .add_systems(Update, simulation_step)
         .run();
 }
