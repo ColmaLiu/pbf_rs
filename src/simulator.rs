@@ -22,7 +22,7 @@ pub struct Simulator {
     pub tank: Vec3, // tank size
     rel_water: Vec3,
     offset: Vec3,
-    slide_pos: f32,
+    pub slide_pos: f32,
     slide_vel: f32,
     slide_dir: i32,
 
@@ -144,6 +144,8 @@ impl Simulator {
     }
 
     fn handle_collisions(&mut self) {
+        let wall_x_physics = self.tank.x * (self.slide_pos - 0.5);
+        println!("物理判定墙位置: wall_x_physics = {}", wall_x_physics);
         for i in 0..self.num_sphere {
             if self.position_[i].x < -0.5 * self.tank.x + self.radius {
                 self.position_[i].x = -0.5 * self.tank.x + self.radius;
@@ -460,7 +462,8 @@ impl Simulator {
                 self.offset = vec3(0.5, 1.0, 0.7);
             } else if self.scene_id == 1 {
                 self.tank = vec3(2.0, 1.0, 0.5);
-                self.rel_water = vec3(0.4, 0.6, 1.0);
+                // self.rel_water = vec3(0.4, 0.6, 1.0);
+                self.rel_water = vec3(0.3, 0.3, 0.3);
                 self.offset = vec3(0.0, 0.0, 0.5);
             }
             self.slide_pos = 1.0;

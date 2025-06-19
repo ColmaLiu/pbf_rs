@@ -1,8 +1,9 @@
 use bevy::prelude::*;
 
 use crate::set_scene::{
-    camera_control_system, pause_resume_button_system, scene_refresh_system, setup,
-    simulation_step, switch_scene_button_system, update_tank_box_system,
+    camera_control_system, manage_wall_box_system, pause_resume_button_system,
+    reset_sim_button_system, scene_refresh_system, setup, simulation_step,
+    switch_scene_button_system, update_tank_box_system, update_wall_box_system,
 };
 use crate::simulator::Simulator;
 // mod parallel;
@@ -21,5 +22,7 @@ fn main() {
         .add_systems(Update, switch_scene_button_system)
         .add_systems(Update, scene_refresh_system)
         .add_systems(Update, update_tank_box_system)
+        .add_systems(Update, reset_sim_button_system)
+        .add_systems(Update, (manage_wall_box_system, update_wall_box_system))
         .run();
 }

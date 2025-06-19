@@ -91,9 +91,70 @@ fn button(asset_server: &AssetServer) -> impl Bundle {
                     TextColor(Color::WHITE),
                     TextShadow::default(),
                 )]
+            ),
+            (
+                Button,
+                ResetSimButton,
+                Node {
+                    width: Val::Px(220.0),
+                    height: Val::Px(80.0),
+                    border: UiRect::all(Val::Px(5.0)),
+                    margin: UiRect {
+                        left: Val::Px(20.0),
+                        top: Val::Px(20.0), // 让按钮排在下方
+                        ..default()
+                    },
+                    justify_content: JustifyContent::Center,
+                    align_items: AlignItems::Center,
+                    ..default()
+                },
+                BorderColor(Color::BLACK),
+                BorderRadius::MAX,
+                BackgroundColor(NORMAL_BUTTON),
+                children![(
+                    Text::new("Reset Simulation"),
+                    TextFont {
+                        font: asset_server.load("fonts/FiraSans-Bold.ttf"),
+                        font_size: 24.0,
+                        ..default()
+                    },
+                    TextColor(Color::WHITE),
+                    TextShadow::default(),
+                )]
             )
         ],
     )
+}
+pub fn reset_sim_button_system(
+    mut interaction_query: Query<
+        (
+            &Interaction,
+            &mut BackgroundColor,
+            &mut BorderColor,
+            &Children,
+        ),
+        (Changed<Interaction>, With<ResetSimButton>),
+    >,
+    mut simulator: ResMut<Simulator>,
+) {
+    for (interaction, mut color, mut border_color, children) in &mut interaction_query {
+        match *interaction {
+            Interaction::Pressed => {
+                simulator.reset_system();
+                // reset_wall_box_system();
+                *color = GREEN.into();
+                border_color.0 = GREEN.into();
+            }
+            Interaction::Hovered => {
+                *color = HOVERED_BUTTON.into();
+                border_color.0 = Color::WHITE;
+            }
+            Interaction::None => {
+                *color = NORMAL_BUTTON.into();
+                border_color.0 = Color::BLACK;
+            }
+        }
+    }
 }
 pub fn pause_resume_button_system(
     mut interaction_query: Query<
@@ -217,6 +278,164 @@ pub fn update_tank_box_system(
             mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions.clone());
             mesh.insert_indices(bevy::render::mesh::Indices::U32(flat_indices.clone()));
         }
+    }
+}
+
+#[derive(Component)]
+pub struct ResetSimButton;
+
+#[derive(Component)]
+pub struct WallBox;
+
+pub fn spawn_wall_box(
+    commands: &mut Commands,
+    simulator: &Simulator,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<StandardMaterial>,
+) {
+    // 墙的初始位置和尺寸
+    let wall_x = simulator.tank.x * (simulator.slide_pos - 0.5);
+    let wall_center = Vec3::new(wall_x, 0.0, 0.0);
+    let wall_size = Vec3::new(0.02, simulator.tank.y, simulator.tank.z);
+
+    // 生成线框mesh
+    let half_size = wall_size / 2.0;
+    let wall_vertices = [
+        [-half_size.x, -half_size.y, -half_size.z],
+        [half_size.x, -half_size.y, -half_size.z],
+        [half_size.x, half_size.y, -half_size.z],
+        [-half_size.x, half_size.y, -half_size.z],
+        [-half_size.x, -half_size.y, half_size.z],
+        [half_size.x, -half_size.y, half_size.z],
+        [half_size.x, half_size.y, half_size.z],
+        [-half_size.x, half_size.y, half_size.z],
+    ];
+    let wall_indices: [[u32; 2]; 12] = [
+        [0, 1],
+        [1, 2],
+        [2, 3],
+        [3, 0],
+        [4, 5],
+        [5, 6],
+        [6, 7],
+        [7, 4],
+        [0, 4],
+        [1, 5],
+        [2, 6],
+        [3, 7],
+    ];
+    let positions: Vec<Vec3> = wall_vertices.iter().map(|&v| Vec3::from_array(v)).collect();
+    let flat_indices: Vec<u32> = wall_indices.iter().flat_map(|&[a, b]| [a, b]).collect();
+
+    let mut wall_mesh = Mesh::new(
+        bevy::render::render_resource::PrimitiveTopology::LineList,
+        RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
+    );
+    wall_mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
+    wall_mesh.insert_indices(bevy::render::mesh::Indices::U32(flat_indices));
+
+    let wall_material = materials.add(StandardMaterial {
+        base_color: YELLOW.into(),
+        unlit: true,
+        ..default()
+    });
+
+    commands.spawn((
+        Mesh3d(meshes.add(wall_mesh)),
+        MeshMaterial3d(wall_material),
+        WallBox,
+        Transform::from_translation(wall_center),
+    ));
+}
+
+pub fn update_wall_box_system(
+    simulator: Res<Simulator>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut query: Query<(&Mesh3d, &mut Transform), With<WallBox>>,
+) {
+    if simulator.scene_id != 1 {
+        // 不是第二场景时，不更新墙体
+        return;
+    }
+
+    let wall_x = simulator.tank.x * (simulator.slide_pos - 0.5);
+    let wall_center = Vec3::new(wall_x, 0.0, 0.0);
+    let wall_size = Vec3::new(0.02, simulator.tank.y, simulator.tank.z);
+
+    let wall_x_render = simulator.tank.x * (simulator.slide_pos - 0.5);
+    println!("渲染墙位置: wall_x_render = {}", wall_x_render);
+
+    let half_size = wall_size / 2.0;
+    let wall_vertices = [
+        [-half_size.x, -half_size.y, -half_size.z],
+        [half_size.x, -half_size.y, -half_size.z],
+        [half_size.x, half_size.y, -half_size.z],
+        [-half_size.x, half_size.y, -half_size.z],
+        [-half_size.x, -half_size.y, half_size.z],
+        [half_size.x, -half_size.y, half_size.z],
+        [half_size.x, half_size.y, half_size.z],
+        [-half_size.x, half_size.y, half_size.z],
+    ];
+    let wall_indices: [[u32; 2]; 12] = [
+        [0, 1],
+        [1, 2],
+        [2, 3],
+        [3, 0],
+        [4, 5],
+        [5, 6],
+        [6, 7],
+        [7, 4],
+        [0, 4],
+        [1, 5],
+        [2, 6],
+        [3, 7],
+    ];
+    let positions: Vec<Vec3> = wall_vertices.iter().map(|&v| Vec3::from_array(v)).collect();
+    let flat_indices: Vec<u32> = wall_indices.iter().flat_map(|&[a, b]| [a, b]).collect();
+
+    for (mesh3d, mut transform) in &mut query {
+        if let Some(mesh) = meshes.get_mut(&mesh3d.0) {
+            mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions.clone());
+            mesh.insert_indices(bevy::render::mesh::Indices::U32(flat_indices.clone()));
+        }
+        transform.translation = wall_center;
+    }
+}
+
+pub fn manage_wall_box_system(
+    mut commands: Commands,
+    simulator: Res<Simulator>,
+    query: Query<Entity, With<WallBox>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    if simulator.scene_id == 1 {
+        // 如果没有墙体实体则生成
+        if query.iter().next().is_none() {
+            spawn_wall_box(&mut commands, &simulator, &mut meshes, &mut materials);
+        }
+    } else {
+        // 不是第二场景时，删除所有墙体实体
+        for entity in &query {
+            commands.entity(entity).despawn();
+        }
+    }
+}
+
+pub fn reset_wall_box_system(
+    mut commands: Commands,
+    query: Query<Entity, With<WallBox>>,
+    simulator: Res<Simulator>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    // 删除所有旧墙体
+    for entity in &query {
+        commands.entity(entity).despawn();
+    }
+    // 只在 scene_id == 1 时重建
+    if simulator.scene_id == 1 {
+        spawn_wall_box(&mut commands, &simulator, &mut meshes, &mut materials);
     }
 }
 
@@ -399,9 +618,45 @@ pub fn simulation_step(
 }
 
 // 新增：场景刷新系统（不受暂停影响）
-pub fn scene_refresh_system(mut simulator: ResMut<Simulator>) {
+pub fn scene_refresh_system(
+    mut simulator: ResMut<Simulator>,
+    commands: Commands,
+    query: Query<Entity, With<Particle>>,
+    meshes: ResMut<Assets<Mesh>>,
+    materials: ResMut<Assets<StandardMaterial>>,
+) {
     if simulator.scene_changed {
         simulator.reset_system();
         simulator.scene_changed = false;
+    }
+    // 重建粒子
+    rebuild_particles_system(commands, query, simulator.into(), meshes, materials);
+}
+
+pub fn rebuild_particles_system(
+    mut commands: Commands,
+    query: Query<Entity, With<Particle>>,
+    simulator: Res<Simulator>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    // 1. 删除所有旧粒子实体
+    for entity in &query {
+        commands.entity(entity).despawn();
+    }
+
+    // 2. 重新生成所有粒子实体
+    for pos in simulator.position.iter() {
+        commands.spawn((
+            Mesh3d(meshes.add(Sphere::new(simulator.radius).mesh().ico(4).unwrap())),
+            MeshMaterial3d(materials.add(StandardMaterial {
+                base_color: Color::srgb(0.0, 30.0 / 255.0, 1.0),
+                metallic: 0.2,
+                perceptual_roughness: 0.7,
+                ..default()
+            })),
+            Transform::from_xyz(pos.x, pos.y, pos.z),
+            Particle,
+        ));
     }
 }
