@@ -221,38 +221,41 @@ impl Simulator {
         let tank = self.tank;
         let index2grid_offset = |index: UVec3| {
             index.x as usize * self.cell_y * self.cell_z
-            + index.y as usize * self.cell_z
-            + index.z as usize
+                + index.y as usize * self.cell_z
+                + index.z as usize
         };
 
-        self.neighbor.par_iter_mut().enumerate().for_each(|(p, neighbors)| {
-            let pos = position_[p];
-            let grid_index = ((pos + 0.5 * tank) / h).as_uvec3() + 1;
+        self.neighbor
+            .par_iter_mut()
+            .enumerate()
+            .for_each(|(p, neighbors)| {
+                let pos = position_[p];
+                let grid_index = ((pos + 0.5 * tank) / h).as_uvec3() + 1;
 
-            for i in -1..=1 {
-                for j in -1..=1 {
-                    for k in -1..=1 {
-                        let offset = index2grid_offset(UVec3::new(
-                            (grid_index.x as i32 + i) as u32,
-                            (grid_index.y as i32 + j) as u32,
-                            (grid_index.z as i32 + k) as u32,
-                        ));
-                        let start = hashtableindex[offset];
-                        let end = hashtableindex[offset + 1];
+                for i in -1..=1 {
+                    for j in -1..=1 {
+                        for k in -1..=1 {
+                            let offset = index2grid_offset(UVec3::new(
+                                (grid_index.x as i32 + i) as u32,
+                                (grid_index.y as i32 + j) as u32,
+                                (grid_index.z as i32 + k) as u32,
+                            ));
+                            let start = hashtableindex[offset];
+                            let end = hashtableindex[offset + 1];
 
-                        for idx in start..end {
-                            let neighbor_index = hashtable[idx];
-                            if neighbor_index != p {
-                                let d = position_[neighbor_index] - pos;
-                                if d.length_squared() < h * h {
-                                    neighbors.push(neighbor_index);
+                            for idx in start..end {
+                                let neighbor_index = hashtable[idx];
+                                if neighbor_index != p {
+                                    let d = position_[neighbor_index] - pos;
+                                    if d.length_squared() < h * h {
+                                        neighbors.push(neighbor_index);
+                                    }
                                 }
                             }
                         }
                     }
                 }
-            }
-        });
+            });
 
         // for p in 0..self.num_sphere {
         //     let pos = self.position_[p];
@@ -315,19 +318,22 @@ impl Simulator {
         const N: i32 = 4;
         let w = poly6(&vec3(0.3 * self.h, 0.0, 0.0), self.h);
 
-        delta_pos.par_iter_mut().enumerate().for_each(|(i, delta_pos_i)| {
-            let pos = self.position_[i];
-            for &j in &self.neighbor[i] {
-                if j == i {
-                    continue;
+        delta_pos
+            .par_iter_mut()
+            .enumerate()
+            .for_each(|(i, delta_pos_i)| {
+                let pos = self.position_[i];
+                for &j in &self.neighbor[i] {
+                    if j == i {
+                        continue;
+                    }
+                    let r = pos - self.position_[j];
+                    let ratio = poly6(&r, self.h) / w;
+                    let s_corr = -K * f32::powi(ratio, N);
+                    *delta_pos_i += (lambda[i] + lambda[j] + s_corr) * grad_spiky(&r, self.h);
                 }
-                let r = pos - self.position_[j];
-                let ratio = poly6(&r, self.h) / w;
-                let s_corr = -K * f32::powi(ratio, N);
-                *delta_pos_i += (lambda[i] + lambda[j] + s_corr) * grad_spiky(&r, self.h);
-            }
-            *delta_pos_i /= self.rest_density;
-        });
+                *delta_pos_i /= self.rest_density;
+            });
 
         // for i in 0..self.num_sphere {
         //     let pos = self.position_[i];
@@ -449,7 +455,8 @@ impl Simulator {
         if self.scene_changed {
             if self.scene_id == 0 {
                 self.tank = vec3(0.8, 1.5, 0.8);
-                self.rel_water = vec3(0.5, 0.6, 0.5);
+                // self.rel_water = vec3(0.5, 0.6, 0.5);
+                self.rel_water = vec3(0.2, 0.2, 0.2);
                 self.offset = vec3(0.5, 1.0, 0.7);
             } else if self.scene_id == 1 {
                 self.tank = vec3(2.0, 1.0, 0.5);

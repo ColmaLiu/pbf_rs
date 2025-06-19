@@ -2,20 +2,235 @@ use std::iter::zip;
 
 use crate::simulator::Simulator;
 use bevy::input::mouse::MouseWheel;
-use bevy::{prelude::*, render::render_asset::RenderAssetUsages};
 
+use bevy::{color::palettes::basic::*, prelude::*, render::render_asset::RenderAssetUsages};
+
+// 仿真运行状态资源
+#[derive(Resource, Default)]
+pub struct SimRunning(pub bool);
+
+const NORMAL_BUTTON: Color = Color::srgb(0.15, 0.15, 0.15);
+const HOVERED_BUTTON: Color = Color::srgb(0.25, 0.25, 0.25);
+const PRESSED_BUTTON: Color = Color::srgb(0.8, 0.2, 0.2);
+
+// // 按钮组件
+#[derive(Component)]
+pub struct SwitchSceneButton;
+
+#[derive(Component)]
+pub struct PauseResumeButton;
+
+fn button(asset_server: &AssetServer) -> impl Bundle {
+    (
+        Node {
+            width: Val::Percent(100.0),
+            height: Val::Percent(100.0),
+            align_items: AlignItems::FlexStart,
+            justify_content: JustifyContent::FlexStart,
+            flex_direction: FlexDirection::Column,
+            ..default()
+        },
+        children![
+            (
+                Button,
+                PauseResumeButton,
+                Node {
+                    width: Val::Px(220.0),
+                    height: Val::Px(80.0),
+                    border: UiRect::all(Val::Px(5.0)),
+                    margin: UiRect {
+                        left: Val::Px(20.0),
+                        top: Val::Px(20.0),
+                        ..default()
+                    },
+                    justify_content: JustifyContent::Center,
+                    align_items: AlignItems::Center,
+                    ..default()
+                },
+                BorderColor(Color::BLACK),
+                BorderRadius::MAX,
+                BackgroundColor(NORMAL_BUTTON),
+                children![(
+                    Text::new("Stop Simulation"),
+                    TextFont {
+                        font: asset_server.load("fonts/FiraSans-Bold.ttf"),
+                        font_size: 24.0,
+                        ..default()
+                    },
+                    // TextColor(Color::srgb(0.1, 0.1, 0.1)),
+                    TextColor(Color::WHITE),
+                    TextShadow::default(),
+                )]
+            ),
+            (
+                Button,
+                SwitchSceneButton, // 标记为切换场景按钮
+                Node {
+                    width: Val::Px(220.0),
+                    height: Val::Px(80.0),
+                    border: UiRect::all(Val::Px(5.0)),
+                    margin: UiRect {
+                        left: Val::Px(20.0),
+                        top: Val::Px(20.0), // 第二个按钮下移
+                        ..default()
+                    },
+                    justify_content: JustifyContent::Center,
+                    align_items: AlignItems::Center,
+                    ..default()
+                },
+                BorderColor(Color::BLACK),
+                BorderRadius::MAX,
+                BackgroundColor(NORMAL_BUTTON),
+                children![(
+                    Text::new("Switch Scene"),
+                    TextFont {
+                        font: asset_server.load("fonts/FiraSans-Bold.ttf"),
+                        font_size: 24.0,
+                        ..default()
+                    },
+                    TextColor(Color::WHITE),
+                    TextShadow::default(),
+                )]
+            )
+        ],
+    )
+}
+pub fn pause_resume_button_system(
+    mut interaction_query: Query<
+        (
+            &Interaction,
+            &mut BackgroundColor,
+            &mut BorderColor,
+            &Children,
+        ),
+        (Changed<Interaction>, With<PauseResumeButton>),
+    >,
+    mut text_query: Query<&mut Text>,
+    mut sim_running: ResMut<SimRunning>,
+) {
+    for (interaction, mut color, mut border_color, children) in &mut interaction_query {
+        let mut text = text_query.get_mut(children[0]).unwrap();
+        match *interaction {
+            Interaction::Pressed => {
+                sim_running.0 = !sim_running.0;
+                **text = if sim_running.0 {
+                    "Stop Simulation".to_string()
+                } else {
+                    "Continue".to_string()
+                };
+                if sim_running.0 {
+                    // 如果仿真运行，重置边框颜色
+                    *color = GREEN.into();
+                    border_color.0 = GREEN.into();
+                } else {
+                    // 如果仿真停止，设置边框颜色为红色
+                    *color = RED.into();
+                    border_color.0 = RED.into();
+                }
+            }
+            Interaction::Hovered => {
+                *color = HOVERED_BUTTON.into();
+                border_color.0 = Color::WHITE;
+            }
+            Interaction::None => {
+                *color = NORMAL_BUTTON.into();
+                border_color.0 = Color::BLACK;
+            }
+        }
+    }
+}
+
+pub fn switch_scene_button_system(
+    mut interaction_query: Query<
+        (
+            &Interaction,
+            &mut BackgroundColor,
+            &mut BorderColor,
+            &Children,
+        ),
+        (Changed<Interaction>, With<SwitchSceneButton>),
+    >,
+    mut simulator: ResMut<Simulator>,
+) {
+    for (interaction, mut color, mut border_color, children) in &mut interaction_query {
+        match *interaction {
+            Interaction::Pressed => {
+                // 切换场景
+                simulator.scene_id = (simulator.scene_id + 1) % 2;
+                simulator.scene_changed = true;
+                *color = GREEN.into();
+                border_color.0 = GREEN.into();
+            }
+            Interaction::Hovered => {
+                *color = HOVERED_BUTTON.into();
+                border_color.0 = Color::WHITE;
+            }
+            Interaction::None => {
+                *color = NORMAL_BUTTON.into();
+                border_color.0 = Color::BLACK;
+            }
+        }
+    }
+}
 // Add this for Particle
 #[derive(Component)]
 pub struct Particle;
+
+#[derive(Component)]
+pub struct TankBox;
+
+pub fn update_tank_box_system(
+    simulator: Res<Simulator>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    query: Query<&Mesh3d, With<TankBox>>,
+) {
+    let half_size = simulator.tank / 2.0;
+    let vertices = [
+        [-half_size.x, -half_size.y, -half_size.z],
+        [half_size.x, -half_size.y, -half_size.z],
+        [half_size.x, -half_size.y, half_size.z],
+        [-half_size.x, -half_size.y, half_size.z],
+        [-half_size.x, half_size.y, -half_size.z],
+        [half_size.x, half_size.y, -half_size.z],
+        [half_size.x, half_size.y, half_size.z],
+        [-half_size.x, half_size.y, half_size.z],
+    ];
+    let indices: [[u32; 2]; 12] = [
+        [0, 1],
+        [1, 2],
+        [2, 3],
+        [3, 0],
+        [4, 5],
+        [5, 6],
+        [6, 7],
+        [7, 4],
+        [0, 4],
+        [1, 5],
+        [2, 6],
+        [3, 7],
+    ];
+    let positions: Vec<Vec3> = vertices.iter().map(|&v| Vec3::from_array(v)).collect();
+    let flat_indices: Vec<u32> = indices.iter().flat_map(|&[a, b]| [a, b]).collect();
+
+    for mesh_handle in &query {
+        if let Some(mesh) = meshes.get_mut(mesh_handle) {
+            mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions.clone());
+            mesh.insert_indices(bevy::render::mesh::Indices::U32(flat_indices.clone()));
+        }
+    }
+}
 
 pub fn setup(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    assets: Res<AssetServer>,
     mut simulator: ResMut<Simulator>, // 注意：需要把Simulator作为资源传入
 ) {
-    // 盒子尺寸
-    let box_size = 1.0;
+    commands.spawn(button(&assets));
+    simulator.reset_system();
+    // 使用 simulator.tank 作为盒子尺寸
+    let box_size = simulator.tank;
     let half_size = box_size / 2.0;
 
     // 创建盒子边框（使用线段）
@@ -24,20 +239,18 @@ pub fn setup(
         RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
     );
 
-    // 定义盒子的8个顶点
     let vertices = [
         // 底面4个顶点
-        [-half_size, -half_size, -half_size],
-        [half_size, -half_size, -half_size],
-        [half_size, -half_size, half_size],
-        [-half_size, -half_size, half_size],
+        [-half_size.x, -half_size.y, -half_size.z],
+        [half_size.x, -half_size.y, -half_size.z],
+        [half_size.x, -half_size.y, half_size.z],
+        [-half_size.x, -half_size.y, half_size.z],
         // 顶面4个顶点
-        [-half_size, half_size, -half_size],
-        [half_size, half_size, -half_size],
-        [half_size, half_size, half_size],
-        [-half_size, half_size, half_size],
+        [-half_size.x, half_size.y, -half_size.z],
+        [half_size.x, half_size.y, -half_size.z],
+        [half_size.x, half_size.y, half_size.z],
+        [-half_size.x, half_size.y, half_size.z],
     ];
-
     // 定义12条边（每个立方体有12条边）
     let indices: [[u32; 2]; 12] = [
         // 底面4条边
@@ -81,9 +294,8 @@ pub fn setup(
     commands.spawn((
         Mesh3d(meshes.add(box_mesh)),
         MeshMaterial3d(border_material),
+        TankBox, // 添加 TankBox 组件
     ));
-
-    simulator.reset_system();
 
     for pos in simulator.position.iter() {
         commands.spawn((
@@ -173,10 +385,23 @@ pub fn camera_control_system(
 
 pub fn simulation_step(
     mut simulator: ResMut<Simulator>,
-    mut query: Query<(&Particle, &mut Transform)>
+    mut query: Query<(&Particle, &mut Transform)>,
+    sim_running: Res<SimRunning>,
 ) {
-    simulator.simulate_timestep(1.0 / 200.0);
+    // 只有仿真步进受暂停控制
+    if sim_running.0 {
+        simulator.simulate_timestep(1.0 / 200.0);
+    }
+    // 无论暂停与否，都同步粒子位置到 Transform
     for (position, (_, mut transform)) in zip(simulator.position.iter(), query.iter_mut()) {
         transform.translation = *position;
+    }
+}
+
+// 新增：场景刷新系统（不受暂停影响）
+pub fn scene_refresh_system(mut simulator: ResMut<Simulator>) {
+    if simulator.scene_changed {
+        simulator.reset_system();
+        simulator.scene_changed = false;
     }
 }
