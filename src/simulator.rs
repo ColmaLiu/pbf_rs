@@ -457,7 +457,7 @@ impl Simulator {
             if self.scene_id == 0 {
                 self.tank = vec3(0.8, 1.5, 0.8);
                 self.rel_water = vec3(0.5, 0.6, 0.5);
-                self.offset = vec3(0.5, 1.0, 0.7);
+                self.offset = vec3(0.5, 0.8, 0.7);
             } else if self.scene_id == 1 {
                 self.tank = vec3(2.0, 1.0, 0.3);
                 self.rel_water = vec3(0.4, 0.5, 1.0);

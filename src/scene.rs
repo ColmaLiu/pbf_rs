@@ -1,9 +1,6 @@
-use std::iter::zip;
+use bevy::{color::palettes::basic::*, input::mouse::MouseWheel, prelude::*, render::render_asset::RenderAssetUsages};
 
 use crate::simulator::Simulator;
-use bevy::input::mouse::MouseWheel;
-
-use bevy::{color::palettes::basic::*, prelude::*, render::render_asset::RenderAssetUsages};
 
 const NORMAL_BUTTON: Color = Color::srgb(0.15, 0.15, 0.15);
 const HOVERED_BUTTON: Color = Color::srgb(0.25, 0.25, 0.25);
@@ -21,7 +18,7 @@ pub struct PauseResumeButton;
 pub struct ResetSimButton;
 
 #[derive(Component)]
-pub struct Particle;
+pub struct Particle(usize);
 
 #[derive(Component)]
 pub struct Boundary;
@@ -268,13 +265,15 @@ pub fn update_boundary(
 }
 
 pub fn setup(
-    mut commands: Commands,
+    commands: ParallelCommands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     assets: Res<AssetServer>,
     mut simulator: ResMut<Simulator>,
 ) {
-    commands.spawn(button(&assets));
+    commands.command_scope(|mut commands| {
+        commands.spawn(button(&assets));
+    });
     simulator.reset_system();
 
     let mut boundary = Mesh::new(
@@ -310,39 +309,47 @@ pub fn setup(
         ..default()
     });
 
-    commands.spawn((
-        Mesh3d(meshes.add(boundary)),
-        MeshMaterial3d(boundary_material),
-        Boundary,
-    ));
-
-    for pos in simulator.position.iter() {
+    commands.command_scope(|mut commands| {
         commands.spawn((
-            Mesh3d(meshes.add(Sphere::new(simulator.radius).mesh().ico(4).unwrap())),
-            MeshMaterial3d(materials.add(StandardMaterial {
-                base_color: Color::srgb(0.0, 30.0 / 255.0, 1.0),
-                metallic: 0.2,
-                perceptual_roughness: 0.7,
-                ..default()
-            })),
-            Transform::from_xyz(pos.x, pos.y, pos.z),
-            Particle,
+            Mesh3d(meshes.add(boundary)),
+            MeshMaterial3d(boundary_material),
+            Boundary,
         ));
+    });
+
+    for (i, pos) in simulator.position.iter().enumerate() {
+        commands.command_scope(|mut commands| {
+            commands.spawn((
+                Mesh3d(meshes.add(Sphere::new(simulator.radius).mesh().ico(4).unwrap())),
+                MeshMaterial3d(materials.add(StandardMaterial {
+                    base_color: Color::srgb(0.0, 30.0 / 255.0, 1.0),
+                    metallic: 0.2,
+                    perceptual_roughness: 0.7,
+                    ..default()
+                })),
+                Transform::from_xyz(pos.x, pos.y, pos.z),
+                Particle(i),
+            ));
+        });
     }
 
-    commands.spawn((
-        PointLight {
-            intensity: 1_000_000.0,
-            range: 20.0,
-            ..default()
-        },
-        Transform::from_xyz(4.0, 8.0, 4.0),
-    ));
+    commands.command_scope(|mut commands| {
+        commands.spawn((
+            PointLight {
+                intensity: 1_000_000.0,
+                range: 20.0,
+                ..default()
+            },
+            Transform::from_xyz(4.0, 8.0, 4.0),
+        ));
+    });
 
-    commands.spawn((
-        Camera3d::default(),
-        Transform::from_xyz(0.0, 0., 3.0).looking_at(Vec3::new(0., 0., 0.), Vec3::Y),
-    ));
+    commands.command_scope(|mut commands| {
+        commands.spawn((
+            Camera3d::default(),
+            Transform::from_xyz(0.0, 0., 3.0).looking_at(Vec3::new(0., 0., 0.), Vec3::Y),
+        ));
+    });
 }
 
 pub fn camera_control_system(
@@ -401,14 +408,14 @@ pub fn simulation_step(
         simulator.simulate_timestep(1.0 / 200.0);
     }
 
-    for (position, (_, mut transform)) in zip(simulator.position.iter(), query.iter_mut()) {
-        transform.translation = *position;
-    }
+    query.par_iter_mut().for_each(|(particle, mut transform)| {
+        transform.translation = simulator.position[particle.0];
+    });
 }
 
 pub fn scene_refresh_system(
     mut simulator: ResMut<Simulator>,
-    commands: Commands,
+    commands: ParallelCommands,
     query: Query<Entity, With<Particle>>,
     meshes: ResMut<Assets<Mesh>>,
     materials: ResMut<Assets<StandardMaterial>>,
@@ -420,28 +427,32 @@ pub fn scene_refresh_system(
     }
 }
 
-pub fn rebuild_particles_system(
-    mut commands: Commands,
+fn rebuild_particles_system(
+    commands: ParallelCommands,
     query: Query<Entity, With<Particle>>,
     simulator: Res<Simulator>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    for entity in &query {
-        commands.entity(entity).despawn();
-    }
+    query.par_iter().for_each(|entity| {
+        commands.command_scope(|mut commands| {
+            commands.entity(entity).despawn();
+        })
+    });
 
-    for pos in simulator.position.iter() {
-        commands.spawn((
-            Mesh3d(meshes.add(Sphere::new(simulator.radius).mesh().ico(4).unwrap())),
-            MeshMaterial3d(materials.add(StandardMaterial {
-                base_color: Color::srgb(0.0, 30.0 / 255.0, 1.0),
-                metallic: 0.2,
-                perceptual_roughness: 0.7,
-                ..default()
-            })),
-            Transform::from_xyz(pos.x, pos.y, pos.z),
-            Particle,
-        ));
+    for (i, pos) in simulator.position.iter().enumerate() {
+        commands.command_scope(|mut commands| {
+            commands.spawn((
+                Mesh3d(meshes.add(Sphere::new(simulator.radius).mesh().ico(4).unwrap())),
+                MeshMaterial3d(materials.add(StandardMaterial {
+                    base_color: Color::srgb(0.0, 30.0 / 255.0, 1.0),
+                    metallic: 0.2,
+                    perceptual_roughness: 0.7,
+                    ..default()
+                })),
+                Transform::from_xyz(pos.x, pos.y, pos.z),
+                Particle(i),
+            ));
+        });
     }
 }
