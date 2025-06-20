@@ -2,6 +2,12 @@
 
 Real-time Position Based Fluids in Rust.
 
+https://github.com/user-attachments/assets/55106279-372e-4830-8550-927931c968a1
+
+https://github.com/user-attachments/assets/d04ee9a6-909c-4a22-a0df-08418e0f7fa4
+
+https://github.com/user-attachments/assets/a967df37-2241-4ec2-8b5a-f08652f98701
+
 ## Quick Start
 
 ### Installation
