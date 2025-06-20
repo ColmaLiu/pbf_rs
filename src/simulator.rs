@@ -70,6 +70,7 @@ fn grad_spiky(r: &Vec3, h: f32) -> Vec3 {
     coeff * diff * diff / (h6 * r_norm.max(1e-24)) * r
 }
 
+#[allow(dead_code)]
 impl Simulator {
     pub fn new() -> Self {
         // a new simulator without scene initialization
@@ -144,8 +145,6 @@ impl Simulator {
     }
 
     fn handle_collisions(&mut self) {
-        let wall_x_physics = self.tank.x * (self.slide_pos - 0.5);
-        println!("物理判定墙位置: wall_x_physics = {}", wall_x_physics);
         for i in 0..self.num_sphere {
             if self.position_[i].x < -0.5 * self.tank.x + self.radius {
                 self.position_[i].x = -0.5 * self.tank.x + self.radius;
@@ -457,13 +456,11 @@ impl Simulator {
         if self.scene_changed {
             if self.scene_id == 0 {
                 self.tank = vec3(0.8, 1.5, 0.8);
-                // self.rel_water = vec3(0.5, 0.6, 0.5);
-                self.rel_water = vec3(0.2, 0.2, 0.2);
+                self.rel_water = vec3(0.5, 0.6, 0.5);
                 self.offset = vec3(0.5, 1.0, 0.7);
             } else if self.scene_id == 1 {
-                self.tank = vec3(2.0, 1.0, 0.5);
-                // self.rel_water = vec3(0.4, 0.6, 1.0);
-                self.rel_water = vec3(0.3, 0.3, 0.3);
+                self.tank = vec3(2.0, 1.0, 0.3);
+                self.rel_water = vec3(0.4, 0.5, 1.0);
                 self.offset = vec3(0.0, 0.0, 0.5);
             }
             self.slide_pos = 1.0;
