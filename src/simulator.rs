@@ -5,7 +5,7 @@ use rayon::prelude::*;
 pub struct Simulator {
     pub position: Vec<Vec3>, // Particle Position
     velocity: Vec<Vec3>,     // Particle Velocity
-    color: Vec<Vec3>,
+    pub color: Vec<Vec3>,
 
     position_: Vec<Vec3>,
     neighbor: Vec<Vec<usize>>,
@@ -417,7 +417,7 @@ impl Simulator {
         self.velocity.clear();
         self.velocity.resize(self.num_sphere, Vec3::ZERO);
         self.color.clear();
-        self.color.resize(self.num_sphere, Vec3::ZERO);
+        self.color.resize(self.num_sphere, Vec3::new(0.0, 30.0 / 255.0, 1.0));
 
         self.position_.clear();
         self.position_.resize(self.num_sphere, Vec3::ZERO);
@@ -455,12 +455,12 @@ impl Simulator {
     pub fn reset_system(&mut self) {
         if self.scene_changed {
             if self.scene_id == 0 {
-                self.tank = vec3(0.8, 1.5, 0.8);
-                self.rel_water = vec3(0.5, 0.6, 0.5);
-                self.offset = vec3(0.5, 0.8, 0.7);
+                self.tank = vec3(1.0, 2.0, 1.0);
+                self.rel_water = vec3(0.8, 0.8, 0.3);
+                self.offset = vec3(0.5, 1.0, 0.7);
             } else if self.scene_id == 1 {
-                self.tank = vec3(2.0, 1.0, 0.3);
-                self.rel_water = vec3(0.4, 0.5, 1.0);
+                self.tank = vec3(2.0, 1.0, 0.5);
+                self.rel_water = vec3(0.4, 0.6, 1.0);
                 self.offset = vec3(0.0, 0.0, 0.5);
             }
             self.slide_pos = 1.0;
